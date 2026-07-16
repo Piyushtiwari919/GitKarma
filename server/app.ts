@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
-import connectDB from "./db/connection.ts";
+import connectDB from "./db/connection.js";
+import redisClient, { connectRedis } from "./db/redis.js";
 
 const app = express();
 
@@ -8,14 +9,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 const PORT: string | number = process.env.PORT || 5000;
+const startRedis = async () => {
+  await connectRedis();
+};
+const startServer = async () => {
+  try {
+    await Promise.all([connectDB(), connectRedis()]);
 
-connectDB()
-  .then(() => {
-    console.log("Database Connection established");
+    console.log("All databases connected successfully");
     app.listen(PORT, () => {
       console.log(`Server is listening at port ${PORT}`);
     });
-  })
-  .catch((err) => {
-    console.error(err, "Database Connection failed");
-});
+  } catch (err) {
+    console.error("❌ Failed to initialize application dependencies:", err);
+    process.exit(1);
+  }
+};
+
+startServer();
