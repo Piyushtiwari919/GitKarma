@@ -9,9 +9,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 const PORT: string | number = process.env.PORT || 5000;
-const startRedis = async () => {
-  await connectRedis();
-};
+
 const startServer = async () => {
   try {
     await Promise.all([connectDB(), connectRedis()]);
