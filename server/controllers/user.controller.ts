@@ -10,22 +10,21 @@ const getUserInfo = async (req, res) => {
 
     if (!response.ok) {
       if (response.status === 404) {
-        console.error("User not found.");
+        throw new Error("User not found.");
       } else {
-        console.error(`API Error: ${response.statusText}`);
+        throw new Error(`API Error: ${response.statusText}`);
       }
-      return null;
     }
     const data = await response.json();
     if (!data) {
       throw new Error("Data is not a json");
     }
     return res.status(200).json({ data: data });
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     return res
       .status(500)
-      .json({ message: "Error occured in getting user info" });
+      .json({ message: err.message });
   }
 };
 
