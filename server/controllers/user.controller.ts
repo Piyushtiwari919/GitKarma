@@ -5,14 +5,16 @@ const getUserInfo = async (req, res) => {
       return res.status(500).json({ message: "No username present" });
     }
     const url = `https://api.github.com/users/${username}`;
+
     const response = await fetch(url);
-    // console.log(response);
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error("User not found.");
+        return res.status(404).json({ message: "User not found." });
       } else {
-        throw new Error(`API Error: ${response.statusText}`);
+        return res
+          .status(400)
+          .json({ message: `API Error: ${response.statusText}` });
       }
     }
     const data = await response.json();
@@ -22,9 +24,7 @@ const getUserInfo = async (req, res) => {
     return res.status(200).json({ data: data });
   } catch (err: any) {
     console.error(err);
-    return res
-      .status(500)
-      .json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 };
 
