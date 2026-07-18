@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Backend Infrastructure for evaluation",
   "main": "app.ts",
+  "type": "module",
   "scripts": {
     "dev": "tsx watch app.ts",
     "build": "tsc",
