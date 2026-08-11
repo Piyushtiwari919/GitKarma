@@ -5,13 +5,13 @@ const redisClient = createClient({
 });
 
 redisClient.on("error", (err) => console.log("Redis Client Error: ", err));
-redisClient.on("connect", () =>
-  console.log("Successfully connected to Redis"),
-);
+redisClient.on("connect", () => console.log("Successfully connected to Redis"));
 
 export const connectRedis = async () => {
   try {
-    await redisClient.connect();
+    if (!redisClient.isOpen) {
+      await redisClient.connect();
+    }
     await redisClient.set("ping", "pong");
     const value = await redisClient.get("ping");
     console.log("Test value from Redis:", value);
