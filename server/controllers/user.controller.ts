@@ -1,31 +1,88 @@
-const getUserInfo = async (req, res) => {
+import { Request, Response } from "express";
+import { validateUserName } from "../utils/validate.js";
+import redisClient from "../db/redis.js";
+import { githubScoreQueue } from "../queue/githubScoreQueue.js";
+
+export const getUserInfo = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
   try {
     const { username } = req.body;
-    if (!username) {
-      return res.status(500).json({ message: "No username present" });
+
+    // 1. Input Validation
+    if (validateUserName(username)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or missing GitHub username.",
+      });
     }
-    const url = `https://api.github.com/users/${username}`;
 
-    const response = await fetch(url);
+    const cleanUsername = username.trim();
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        return res.status(404).json({ message: "User not found." });
+    const userCacheData = await redisClient.get(`username:${cleanUsername}`);
+
+    if (!userCacheData) {
+      const customJobId = `user-${cleanUsername}`;
+      const existingJob = await githubScoreQueue.getJob(customJobId);
+
+      if (!existingJob) {
+        const job = await githubScoreQueue.add(
+          "calculate-score",
+          { cleanUsername },
+          {
+            jobId: customJobId,
+          },
+        );
+        return res.status(202).json({ message: "Accepted", job });
       } else {
-        return res
-          .status(400)
-          .json({ message: `API Error: ${response.statusText}` });
+        const state = await existingJob.getState();
+
+        if (state === "waiting" || state === "active") {
+          return res.status(202).json({
+            message: "Job is already being processed",
+            jobId: customJobId,
+            state,
+          });
+        }
+
+        if (state === "failed") {
+          // remove and recreate if already made three attempts
+          if (existingJob.attemptsMade === 3) {
+            await existingJob.remove();
+            const job = await githubScoreQueue.add(
+              "calculate-score",
+              { cleanUsername },
+              {
+                jobId: customJobId,
+              },
+            );
+            return res.status(202).json({
+              message: "Job is recreated and pushed to the queue",
+              job,
+            });
+          }
+          return res.status(202).json({
+            message: "Job is failed and will retry after few seconds",
+          });
+        }
+        return res.status(202).json({
+          message: "Job is completed",
+          jobId: customJobId,
+          state,
+        });
       }
+    } else {
+      return res.status(200).json({
+        success: true,
+        data: JSON.parse(userCacheData),
+      });
     }
-    const data = await response.json();
-    if (!data) {
-      throw new Error("Data is not a json");
-    }
-    return res.status(200).json({ data: data });
   } catch (err: any) {
-    console.error(err);
-    return res.status(500).json({ message: err.message });
+    console.error("Error in getUserInfo controller:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Internal server error.",
+    });
   }
 };
-
-export { getUserInfo };
