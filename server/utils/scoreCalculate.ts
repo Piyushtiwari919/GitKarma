@@ -8,8 +8,8 @@ interface GitHubMetrics {
 export const calculateGitHubScore = (metrics: GitHubMetrics): number => {
   const { totalCommits, mergedPRs, totalStars, followers } = metrics;
 
-  // 1. Commits (Max 60 pts) - 1-year cap at 1,500 commits
-  const ANNUAL_COMMIT_CAP = 1500;
+  // 1. Commits (Max 60 pts) - 1-year cap at 1,200 commits
+  const ANNUAL_COMMIT_CAP = 1200;
   const commitPoints =
     Math.min(totalCommits, ANNUAL_COMMIT_CAP) * (60 / ANNUAL_COMMIT_CAP);
 
