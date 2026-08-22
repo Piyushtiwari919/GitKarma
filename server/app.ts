@@ -1,10 +1,18 @@
 import "dotenv/config";
 import express from "express";
 import connectDB from "./db/connection.js";
-import redisClient, { connectRedis } from "./db/redis.js";
+import cors from "cors";
+import { connectRedis } from "./db/redis.js";
 import userRouter from "./routes/user.routes.js";
 
 const app = express();
+
+const corsOptions = {
+  origin: process.env.FRONTEND_URL,
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
