@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { getUserInfo } from "../controllers/user.controller.js";
+import { getUserInfo, getJobProgress } from "../controllers/user.controller.js";
 
 const userRouter = Router();
 
-userRouter.get("/user/getInfo", getUserInfo);
+userRouter.post("/api/user/getInfo", getUserInfo);
+
+userRouter.get("/api/user/progress/:jobId", getJobProgress);
 
 export default userRouter;
