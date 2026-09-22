@@ -1,7 +1,7 @@
-import { Queue, createNodeRedisClient } from "bullmq";
-import redisClient from "../db/redis.js";
+import { Queue } from "bullmq";
+import { createBullMQClient } from "../db/redis.js";
 
-const connection = createNodeRedisClient(redisClient);
+const connection = createBullMQClient();
 
 const githubScoreQueue = new Queue("github-score-queue", {
   connection,
