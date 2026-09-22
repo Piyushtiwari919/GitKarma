@@ -33,6 +33,10 @@ const userSchema = new Schema(
     personaTitle: {
       type: String,
     },
+    percentile: {
+      type: Number,
+      default: null,
+    },
     lastAnalyzedAt: {
       type: Date,
       required: true,
