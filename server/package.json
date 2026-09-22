@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch app.ts",
-    "worker": "tsx watch workers/githubScoreWorker.ts",
+    "scoreworker": "tsx watch workers/githubScoreWorker.ts",
+    "analyticsworker": "tsx watch workers/analyticsworker.ts",
     "build": "tsc",
     "start": "node dist/server.js"
   },
@@ -23,8 +24,7 @@
     "express": "^5.2.1",
     "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.7.4",
-    "redis": "^6.1.0"
+    "mongoose": "^9.7.4"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
