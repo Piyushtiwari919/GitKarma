@@ -147,8 +147,8 @@ const githubScoreQueueEvents = new QueueEvents("github-score-queue");
 
 export const getJobProgress = async (req: Request, res: Response) => {
   try {
-    const { jobId }= req.params;
-    const cleanJobId = jobId?.trim();
+    const { jobId } = req.params;
+    const cleanJobId = (jobId as string).trim();
 
     const job = await githubScoreQueue.getJob(cleanJobId);
 
