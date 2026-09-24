@@ -23,71 +23,114 @@ export const getUserInfo = async (
     const cleanUsername = username.trim();
 
     const userCacheData = await redisClient.get(`username:${cleanUsername}`);
+    console.log(userCacheData);
 
-    if (!userCacheData) {
-      const customJobId = `user-${cleanUsername}`;
-      const existingJob = await githubScoreQueue.getJob(customJobId);
+    if (userCacheData) {
+      return res.status(200).json({
+        success: true,
+        data: JSON.parse(userCacheData),
+      });
+    }
 
-      if (!existingJob) {
-        const job = await githubScoreQueue.add(
-          "calculate-score",
-          { cleanUsername },
-          {
-            jobId: customJobId,
-          },
-        );
-        return res.status(202).json({ message: "Accepted", job });
-      } else {
-        const state = await existingJob.getState();
+    //* Check The Vault (MongoDB) before queueing a job
+    const existingMongoData = await User.findOne({
+      githubUsername: cleanUsername,
+    });
 
-        if (state === "waiting" || state === "active") {
-          return res.status(202).json({
-            message: "Job is already being processed",
-            jobId: customJobId,
-            state,
-          });
-        }
+    // Define freshness (e.g., data is less than 8 hours old)
+    const EIGHT_HOURS = 8 * 60 * 60 * 1000;
+    const isDataFresh =
+      existingMongoData &&
+      Date.now() - new Date(existingMongoData.lastAnalyzedAt).getTime() <
+        EIGHT_HOURS;
 
-        if (state === "failed") {
-          // remove and recreate if already made three attempts
-          if (existingJob.attemptsMade === 3) {
-            await existingJob.remove();
-            const job = await githubScoreQueue.add(
-              "calculate-score",
-              { cleanUsername },
-              {
-                jobId: customJobId,
-              },
-            );
-            return res.status(202).json({
-              message: "Job is recreated and pushed to the queue",
-              job,
-            });
-          }
-          return res.status(202).json({
-            message: "Job is failed and will retry after few seconds",
-          });
-        }
+    if (isDataFresh) {
+      // Self-Heal Redis: Put the valid MongoDB data back into Redis
+      const metrics = existingMongoData.metrics;
+      const payload = {
+        username: existingMongoData.githubUsername,
+        githubScore: existingMongoData.currentScore,
+        metrics: {
+          followers: metrics[0].followers ?? 0,
+          mergedPRs: metrics[0].pullRequests ?? 0,
+          totalCommits: metrics[0].commits ?? 0,
+          totalStars: metrics[0].stars ?? 0,
+        },
+        personaTitle: existingMongoData.personaTitle,
+        percentileScore: existingMongoData.percentile,
+      };
 
-        const userCacheJobData = await redisClient.get(
-          `username:${cleanUsername}`,
-        );
-        if (userCacheJobData) {
-          return res.status(200).json({
-            message: "Job is completed",
-            data: JSON.parse(userCacheJobData),
-          });
-        }
+      await redisClient.set(
+        `username:${cleanUsername}`,
+        JSON.stringify(payload),
+        "EX",
+        3600,
+      );
+
+      // Serve directly to the user instantly
+      return res.status(200).json({
+        success: true,
+        data: payload,
+      });
+    }
+
+    const customJobId = `user-${cleanUsername}`;
+    const existingJob = await githubScoreQueue.getJob(customJobId);
+
+    if (!existingJob) {
+      const job = await githubScoreQueue.add(
+        "calculate-score",
+        { cleanUsername },
+        {
+          jobId: customJobId,
+        },
+      );
+      return res.status(202).json({ message: "Accepted", job });
+    } else {
+      const state = await existingJob.getState();
+
+      if (state === "waiting" || state === "active") {
         return res.status(202).json({
-          message: "Job is completed",
+          message: "Job is already being processed",
           jobId: customJobId,
           state,
         });
       }
-    } else {
-      return res.status(200).json({
-        success: true,
-        data: JSON.parse(userCacheData),
+
+      if (state === "failed") {
+        // remove and recreate if already made three attempts
+        if (existingJob.attemptsMade === 3) {
+          await existingJob.remove();
+          const job = await githubScoreQueue.add(
+            "calculate-score",
+            { cleanUsername },
+            {
+              jobId: customJobId,
+            },
+          );
+          return res.status(202).json({
+            message: "Job is recreated and pushed to the queue",
+            job,
+          });
+        }
+        return res.status(202).json({
+          message: "Job is failed and will retry after few seconds",
+        });
+      }
+
+      const userCacheJobData = await redisClient.get(
+        `username:${cleanUsername}`,
+      );
+      if (userCacheJobData) {
+        return res.status(200).json({
+          message: "Job is completed",
+          data: JSON.parse(userCacheJobData),
+        });
+      }
+      return res.status(202).json({
+        message: "Job is completed",
+        jobId: customJobId,
+        state,
       });
     }
   } catch (err: any) {
@@ -104,8 +147,7 @@ const githubScoreQueueEvents = new QueueEvents("github-score-queue");
 
 export const getJobProgress = async (req: Request, res: Response) => {
   try {
-    const { jobId } = req.params;
-    console.log(jobId);
+    const { jobId }= req.params;
     const cleanJobId = jobId?.trim();
 
     const job = await githubScoreQueue.getJob(cleanJobId);
@@ -166,6 +208,10 @@ export const getJobProgress = async (req: Request, res: Response) => {
         res.write(
           `id: ${jobId}\nevent: progress\ndata: ${JSON.stringify(data)}\n\n`,
         );
+        // If the job completed or got rejected, close the SSE connection cleanly
+        if (data.step === "REJECTED") {
+          cleanup();
+        }
       }
     };
 
