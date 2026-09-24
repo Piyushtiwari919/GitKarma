@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { QueueEvents } from "bullmq";
 import { validateUserName } from "../utils/validate.js";
-import redisClient from "../db/redis.js";
+import redisClient, { createBullMQClient } from "../db/redis.js";
 import { githubScoreQueue } from "../queue/githubScoreQueue.js";
 import User from "../models/user.model.js";
 
@@ -143,7 +143,9 @@ export const getUserInfo = async (
 };
 
 // Initializing the listener ONCE outside the controller (Singleton)
-const githubScoreQueueEvents = new QueueEvents("github-score-queue");
+const githubScoreQueueEvents = new QueueEvents("github-score-queue", {
+  connection: createBullMQClient(),
+});
 
 export const getJobProgress = async (req: Request, res: Response) => {
   try {
