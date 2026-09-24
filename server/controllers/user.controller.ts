@@ -160,11 +160,14 @@ export const getJobProgress = async (req: Request, res: Response) => {
 
       if (userData) {
         // 2. The job finished so fast it beat the SSE connection.
+        // Fast-finish edge case
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
+          "Cache-Control": "no-cache, no-transform", // FIX 1: Prevent proxy compression
           Connection: "keep-alive",
+          "X-Accel-Buffering": "no", // FIX 2: Disable proxy buffering
         });
+        res.flushHeaders(); // FIX 3: Force headers down the TCP pipe immediately
 
         res.write(
           `id: ${jobId}\nevent: completed\ndata: ${JSON.stringify({ status: "done", message: "Already completed" })}\n\n`,
@@ -176,15 +179,16 @@ export const getJobProgress = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "Job not found" });
     }
 
-    // Set headers for SSE
+    // Main SSE Connection
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-transform", // FIX 1
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no", // FIX 2
     });
+    res.flushHeaders(); // FIX 3
 
     // Reconnection Handling: Send current state immediately.
-
     const currentProgress = job.progress;
     res.write(
       `id: ${jobId}\nevent: progress\ndata: ${JSON.stringify(currentProgress)}\n\n`,
