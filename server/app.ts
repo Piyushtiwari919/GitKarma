@@ -5,7 +5,6 @@ import cors from "cors";
 import redisClient, { connectRedis } from "./db/redis.js";
 import userRouter from "./routes/user.routes.js";
 import { analyticsScheduler } from "./utils/analyticsScheduler.js"; // Kept separate as requested
-import rateLimitRouter from "./routes/test.routes.js";
 
 const app = express();
 
