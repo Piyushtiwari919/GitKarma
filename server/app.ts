@@ -5,17 +5,23 @@ import cors from "cors";
 import redisClient, { connectRedis } from "./db/redis.js";
 import userRouter from "./routes/user.routes.js";
 import { analyticsScheduler } from "./utils/analyticsScheduler.js"; // Kept separate as requested
+import rateLimitRouter from "./routes/test.routes.js";
 
 const app = express();
 
 const corsOptions = {
   origin: process.env.FRONTEND_URL,
   credentials: true,
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 };
 
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Trust the first proxy hop to correctly parse the X-Forwarded-For header(rate-limiting)
+app.set("trust proxy", 1);
 
 const PORT: string | number = process.env.PORT || 5000;
 
@@ -32,7 +38,9 @@ redisClient.on("ready", async () => {
     return;
   }
 
-  console.log("[Disaster Recovery] Redis reconnected after a drop. Restoring Cron Jobs...");
+  console.log(
+    "[Disaster Recovery] Redis reconnected after a drop. Restoring Cron Jobs...",
+  );
   try {
     // Re-upsert the job into the fresh Redis memory
     await analyticsScheduler();
