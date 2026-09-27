@@ -92,8 +92,17 @@ export const useSSE = () => {
       });
 
       es.onerror = () => {
-        setStatus("error");
-        disconnect();
+        console.warn(
+          "Network blip detected. Browser is attempting to reconnect...",
+        );
+        setStatus("connecting");
+
+        // EventSource.CLOSED (2) means the connection is permanently dead
+        if (es.readyState === EventSource.CLOSED) {
+          setStatus("error");
+          setErrorMessage("Connection permanently lost. Please try again.");
+          disconnect();
+        }
       };
     },
     [disconnect],

@@ -1,110 +1,195 @@
-import { useRouteError, isRouteErrorResponse } from "react-router-dom";
+import { isRouteErrorResponse, Link, useRouteError } from "react-router-dom";
 
-const Error = () => {
-  // 1. Capture the error thrown by the router or frontend crash
-  const error = useRouteError();
+const getResponseMessage = (error: unknown): string | undefined => {
+  if (!isRouteErrorResponse(error)) return undefined;
 
-  // 2. Set up default state for a generic frontend crash
-  let title = "Something went wrong";
-  let message =
-    "An unexpected application error occurred. Our team has been notified.";
-  let errorCode = "500 / CRASH";
+  const data: unknown = error.data;
 
-  // 3. Intelligently parse the error based on its type
-  if (isRouteErrorResponse(error)) {
-    // This handles thrown HTTP responses (404, 401, 503)
-    errorCode = error.status.toString();
-
-    if (error.status === 404) {
-      title = "Page Not Found";
-      message = "The page you are looking for doesn't exist or has been moved.";
-    } else if (error.status === 401) {
-      title = "Unauthorized";
-      message = "You don't have permission to view this page.";
-    } else if (error.status === 503) {
-      title = "Service Unavailable";
-      message =
-        "The GitKarma backend is currently down for maintenance. Please try again later.";
-    } else {
-      title = error.statusText || "Oops!";
-      message = error.data?.message || "An unexpected network error occurred.";
-    }
-  } else if (error instanceof Error) {
-    // This handles pure JavaScript crashes (e.g., TypeError)
-    message = error.message;
+  if (typeof data === "string" && data.trim()) {
+    return data.trim().slice(0, 500);
   }
 
-  // Log to console for debugging (in production, send this to Sentry/Datadog)
-  console.error("GitKarma Global Error:", error);
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "message" in data &&
+    typeof data.message === "string" &&
+    data.message.trim()
+  ) {
+    return data.message.trim().slice(0, 500);
+  }
+
+  return undefined;
+};
+
+const getDebugDetails = (error: unknown): string => {
+  if (error instanceof globalThis.Error) {
+    return error.stack ?? `${error.name}: ${error.message}`;
+  }
+
+  try {
+    return JSON.stringify(error, null, 2) ?? String(error);
+  } catch {
+    return String(error);
+  }
+};
+
+const ErrorPage = () => {
+  const routeError = useRouteError();
+
+  let title = "Something went wrong";
+  let message =
+    "An unexpected error occurred. Please try again or return home.";
+  let errorCode = "APPLICATION ERROR";
+
+  if (isRouteErrorResponse(routeError)) {
+    errorCode = `HTTP ${routeError.status}`;
+
+    switch (routeError.status) {
+      case 404:
+        title = "Page not found";
+        message = "The page you're looking for doesn't exist or has moved.";
+        break;
+
+      case 401:
+        title = "Unauthorized";
+        message = "You're not authorized to access this page.";
+        break;
+
+      case 403:
+        title = "Access denied";
+        message = "You don't have permission to access this page.";
+        break;
+
+      case 429:
+        title = "Too many requests";
+        message = "Please wait a moment before trying again.";
+        break;
+
+      case 503:
+        title = "Service unavailable";
+        message =
+          "This service is temporarily unavailable. Please try again shortly.";
+        break;
+
+      default:
+        title = routeError.statusText || "Request failed";
+        message =
+          getResponseMessage(routeError) ??
+          "The request could not be completed. Please try again.";
+    }
+  } else if (routeError instanceof globalThis.Error) {
+    errorCode = "CLIENT ERROR";
+  }
+
+  if (import.meta.env.DEV) {
+    console.error("GitKarma route error:", routeError);
+  }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#0d1117] p-4 text-center px-4 sm:px-6 lg:px-8">
-      {/* Visual Error Indicator */}
-      <div className="mb-8 flex h-24 w-24 items-center justify-center rounded-full border border-[#30363d] bg-[#161b22] text-[#ff5f56] shadow-lg">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="40"
-          height="40"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-          <line x1="12" y1="9" x2="12" y2="13"></line>
-          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-        </svg>
-      </div>
-
-      {/* Error Code & Title */}
-      <p className="text-sm font-semibold tracking-widest text-[#ff5f56] uppercase">
-        Error {errorCode}
-      </p>
-      <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#c9d1d9] sm:text-5xl">
-        {title}
-      </h1>
-
-      {/* Error Details */}
-      <p className="mt-4 max-w-lg text-base text-gray-400 sm:text-lg">
-        {message}
-      </p>
-
-      {/* Redirection / Escape Hatch */}
-      <div className="mt-10 flex gap-4">
-        {/* We use a hard anchor tag for reloading the page if the crash corrupted React state */}
-        <button
-          onClick={() => (window.location.href = "/")}
-          className="inline-flex items-center justify-center rounded-md border border-transparent bg-[#2ea043] px-6 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-[#2c974b] focus:outline-none focus:ring-2 focus:ring-[#2ea043] focus:ring-offset-2 focus:ring-offset-[#0d1117]"
-        >
-          Return to Home
-        </button>
-
-        {/* Back button option for minor routing errors */}
-        <button
-          onClick={() => window.history.back()}
-          className="inline-flex items-center justify-center rounded-md border border-[#30363d] bg-transparent px-6 py-3 text-base font-medium text-[#c9d1d9] transition-colors hover:bg-[#161b22] focus:outline-none focus:ring-2 focus:ring-[#8250df] focus:ring-offset-2 focus:ring-offset-[#0d1117]"
-        >
-          Go Back
-        </button>
-      </div>
-
-      {/* Optional: Developer tip for local environments */}
-      {import.meta.env.NODE_ENV === "development" && (
-        <div className="mt-12 max-w-2xl overflow-auto rounded-md bg-[#161b22] p-4 text-left border border-[#30363d]">
-          <p className="text-xs font-mono text-red-400">
-            [Dev Only] Exception Details:
-          </p>
-          <pre className="mt-2 text-xs text-gray-400 whitespace-pre-wrap font-mono">
-            {error instanceof Error
-              ? error.stack
-              : JSON.stringify(error, null, 2)}
-          </pre>
+    <main className="flex min-h-screen items-center justify-center bg-[#0d1117] px-4 py-10 text-center">
+      <section
+        aria-labelledby="error-title"
+        role="alert"
+        className="w-full max-w-lg rounded-2xl border border-[#30363d] bg-[#161b22] p-7 shadow-xl sm:p-10"
+      >
+        {/* Icon */}
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#f85149]/20 bg-[#f85149]/10 text-[#f85149]">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-7 w-7"
+            aria-hidden="true"
+          >
+            <path d="M12 9v4" />
+            <path d="M12 17h.01" />
+            <path d="M10.3 3.5 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.5a2 2 0 0 0-3.4 0Z" />
+          </svg>
         </div>
-      )}
+
+        {/* Error code */}
+        <p className="mt-6 font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[#f85149]">
+          {errorCode}
+        </p>
+
+        {/* Title */}
+        <h1
+          id="error-title"
+          className="mt-3 text-2xl font-bold tracking-tight text-[#f0f6fc] sm:text-3xl"
+        >
+          {title}
+        </h1>
+
+        {/* Description */}
+        <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[#8b949e]">
+          {message}
+        </p>
+
+        {/* Actions */}
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <Link
+            to="/"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#238636] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#2ea043] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3fb950] focus-visible:ring-offset-2 focus-visible:ring-offset-[#161b22]"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="m3 10 9-7 9 7" />
+              <path d="M5 9v12h14V9" />
+              <path d="M9 21v-7h6v7" />
+            </svg>
+            Return home
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#30363d] bg-transparent px-5 py-2.5 text-sm font-medium text-[#c9d1d9] transition-colors hover:border-[#484f58] hover:bg-[#21262d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8250df] focus-visible:ring-offset-2 focus-visible:ring-offset-[#161b22]"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M20 7v5h-5" />
+              <path d="M4 17v-5h5" />
+              <path d="M5.6 9a7 7 0 0 1 11.6-2L20 12" />
+              <path d="M18.4 15a7 7 0 0 1-11.6 2L4 12" />
+            </svg>
+            Reload page
+          </button>
+        </div>
+
+        {/* Development-only details */}
+        {import.meta.env.DEV && (
+          <details className="mt-8 rounded-lg border border-[#30363d] bg-[#0d1117] text-left">
+            <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-[#8b949e] hover:text-[#c9d1d9]">
+              Developer details
+            </summary>
+
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words border-t border-[#30363d] p-4 font-mono text-xs leading-5 text-[#f85149]">
+              {getDebugDetails(routeError)}
+            </pre>
+          </details>
+        )}
+      </section>
     </main>
   );
 };
 
-export default Error;
+export default ErrorPage;
