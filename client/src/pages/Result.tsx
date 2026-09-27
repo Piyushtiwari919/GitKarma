@@ -6,7 +6,9 @@ import { useSSE } from "../hooks/useSSE";
 import { setUserData } from "../store/slices/scoreSlice.js";
 import ProgressTerminal from "../components/score/ProgressTerminal.tsx";
 import ScoreDashboard from "../components/score/ScoreDashboard.tsx";
+import BotDetected from "../components/bot/BotDetected.tsx";
 import NotFound from "./NotFound.tsx";
+
 const Result = () => {
   const { username } = useParams<{ username: string }>();
   const navigate = useNavigate();
@@ -15,7 +17,7 @@ const Result = () => {
   // Assuming your slice stores data in state.score.userData
   const userData = useSelector((state: any) => state.score?.userData);
 
-  const { progress, status, errorMessage, connect } = useSSE();
+  const { progress, status, errorMessage, rejectionInfo, connect } = useSSE();
 
   // Function to fetch the final payload once BullMQ is done
   const fetchFinalScore = useCallback(async () => {
@@ -56,6 +58,17 @@ const Result = () => {
 
   // --- RENDERING LOGIC ---
 
+  // 1. Bot / automated activity rejection
+  if (status === "rejected") {
+    return (
+      <BotDetected
+        username={username || "User"}
+        rejectionData={rejectionInfo}
+      />
+    );
+  }
+
+  // 2. Actual technical failure
   if (status === "error") {
     // Check if the backend specifically told us the user wasn't found
     const isUserNotFound = errorMessage?.toLowerCase().includes("not found");
