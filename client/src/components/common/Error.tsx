@@ -1,4 +1,4 @@
-import { useRouteError, isRouteErrorResponse, Link } from "react-router-dom";
+import { useRouteError, isRouteErrorResponse } from "react-router-dom";
 
 const Error = () => {
   // 1. Capture the error thrown by the router or frontend crash

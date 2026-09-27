@@ -3,7 +3,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 export const useSSE = () => {
   const [progress, setProgress] = useState<number>(0);
   const [status, setStatus] = useState<
-    "idle" | "connecting" | "open" | "error" | "closed"
+    "idle" | "connecting" | "open" | "error" | "closed" | "rejected"
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -34,7 +34,8 @@ export const useSSE = () => {
           const data = JSON.parse(e.data);
           if (data?.step === "REJECTED") {
             if (data?.reason === "BOT_DETECTED") {
-              // Do Something: TODO
+              setStatus("rejected");
+              disconnect();
             }
           }
           setProgress(Number(data?.progress || data));
