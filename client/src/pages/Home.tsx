@@ -69,8 +69,12 @@ const Home = () => {
           const errorMessage =
             error.response?.data?.message ||
             "❌ Failed to fetch GitHub user data";
-
-          showToast(errorMessage);
+          if (errorMessage.includes("Rate limit")) {
+            let timeLeft = error?.response?.data?.retryAfterSeconds;
+            showToast(`${errorMessage} after ${timeLeft} sec`);
+          } else {
+            showToast(errorMessage);
+          }
         } else {
           showToast("❌ Something went wrong. Please try again.");
         }
