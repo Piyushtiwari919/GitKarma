@@ -24,7 +24,7 @@ const ipRateLimiter = rateLimit({
     return res.status(429).json({
       success: false,
       error: "Too Many Requests",
-      message: "Rate limit exceeded. Please try again later.",
+      message: "Rate limit exceeded. Please try again",
       retryAfterSeconds: Number(retryAfter),
       limit: options.limit,
     });

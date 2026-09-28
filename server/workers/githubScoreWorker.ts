@@ -110,12 +110,12 @@ const backgroundWorker = new Worker(
     ) {
       await job.updateProgress({
         step: "REJECTED",
-        progress: 100,
         reason: "BOT_DETECTED",
-        message: "Account flagged for automated/non-standard activity.",
+        message:
+          "This profile has been identified as automated or bot activity.",
+        progress: 100,
       });
 
-      // BUG FIX: Changed findById to findOne. findById expects an ObjectId, not an object.
       const isUserExists = await FlaggedAccount.findOne({
         githubUserName: cleanUsername,
       });
@@ -128,8 +128,12 @@ const backgroundWorker = new Worker(
         });
       }
 
-      // Safe to return directly because bot detection is an intentional short-circuit, not a failure.
-      return { success: false, status: "REJECTED", reason: "BOT_DETECTED" };
+      return {
+        success: false,
+        status: "REJECTED",
+        reason: "BOT_DETECTED",
+        message: "This profile is not eligible for GitKarma scoring.",
+      };
     }
 
     // --- 5. Calculate Score ---
@@ -203,7 +207,7 @@ const backgroundWorker = new Worker(
 
     await job.updateProgress({ step: "FINISHED_EXECUTION", progress: 100 });
 
-    return { success: true, username: cleanUsername };
+    return { success: true, status: "COMPLETED", username: cleanUsername };
   },
   {
     connection: workerConnection,
