@@ -14,10 +14,12 @@ export const dailyIpBlacklist = async (
     // 1. Check if they are already permanently banned for the day
     const isBanned = await redisClient.get(blacklistKey);
     if (isBanned) {
+      const timeLeftSeconds = await redisClient.ttl(blacklistKey);
       return res.status(403).json({
         success: false,
         message:
           "Your IP has been temporarily blocked as your Daily limit exceeded.",
+        retryAfter: timeLeftSeconds,
       });
     }
 
@@ -36,6 +38,7 @@ export const dailyIpBlacklist = async (
       return res.status(403).json({
         success: false,
         message: "Daily limit exceeded. IP Blacklisted.",
+        retryAfter: 86400,
       });
     }
 
