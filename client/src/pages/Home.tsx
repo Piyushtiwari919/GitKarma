@@ -152,13 +152,13 @@ const Home = () => {
         {/* Ambient lighting */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-[42%] -z-10 h-[28rem] w-[min(90vw,48rem)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-600/15 blur-[120px]"
+          className="pointer-events-none absolute left-1/2 top-[42%] -z-10 h-112 w-[min(90vw,48rem)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-purple-600/15 blur-[120px]"
         />
 
         {/* Subtle secondary glow */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 left-1/2 -z-10 h-40 w-[min(80vw,40rem)] -translate-x-1/2 rounded-full bg-indigo-500/[0.06] blur-[90px]"
+          className="pointer-events-none absolute bottom-0 left-1/2 -z-10 h-40 w-[min(80vw,40rem)] -translate-x-1/2 rounded-full bg-indigo-500/6 blur-[90px]"
         />
 
         {/* Hero */}
@@ -173,7 +173,7 @@ const Home = () => {
           <h1 className="text-4xl font-extrabold tracking-tighter text-zinc-50 sm:text-6xl lg:text-7xl">
             Discover Your
             <br />
-            <span className="bg-gradient-to-r from-purple-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-purple-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent">
               GitKarma
             </span>
           </h1>
