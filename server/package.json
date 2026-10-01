@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch app.ts",
-    "scoreworker": "tsx watch workers/githubScoreWorker.ts",
-    "analyticsworker": "tsx watch workers/analyticsworker.ts",
+    "worker:score": "tsx watch workers/githubScoreWorker.ts",
+    "worker:analytics": "tsx watch workers/analyticsworker.ts",
     "build": "tsc",
     "start": "node dist/server.js"
   },
