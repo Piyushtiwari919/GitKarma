@@ -20,7 +20,15 @@ export const getUserInfo = async (
       });
     }
 
-    const cleanUsername = username.trim();
+    let cleanUsername = username.trim();
+    if (!cleanUsername) {
+      return res.status(400).json({
+        success: false,
+        message: "Username cannot be Empty",
+      });
+    }
+    
+    cleanUsername = cleanUsername.toLowerCase();
 
     const userCacheData = await redisClient.get(`username:${cleanUsername}`);
     console.log(userCacheData);
