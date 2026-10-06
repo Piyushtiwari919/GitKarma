@@ -63,11 +63,12 @@ const Home = () => {
 
         if (response.status === 202) {
           showToast("✅ Worker is active");
-
           setTimeout(() => {
-            navigate(`/score/${githubUsername}`);
+            // Pass a flag telling Result.tsx to skip the initial API check
+            navigate(`/score/${githubUsername}`, {
+              state: { jobAlreadyStarted: true },
+            });
           }, 100);
-
           return;
         }
 

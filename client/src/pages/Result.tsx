@@ -1,51 +1,107 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
+
 import { useSSE } from "../hooks/useSSE";
 import { setUserData } from "../store/slices/scoreSlice.js";
+
 import ProgressTerminal from "../components/score/ProgressTerminal.tsx";
 import ScoreDashboard from "../components/score/ScoreDashboard.tsx";
 import BotDetected from "../components/bot/BotDetected.tsx";
 import NotFound from "./NotFound.tsx";
 
 const Result = () => {
-  const { username: rawUsername } = useParams<{ username: string }>();
+  const { username: rawUsername } = useParams<{
+    username: string;
+  }>();
+
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const location = useLocation();
 
-  // Normalize route param to lowercase
+  /*
+   * Home.tsx passes this when it has already called /getInfo
+   * and received HTTP 202.
+   *
+   * That means Result.tsx should NOT make another /getInfo
+   * request. It should connect directly to SSE.
+   */
+  const jobAlreadyStarted = location.state?.jobAlreadyStarted === true;
+
+  /*
+   * Normalize the username from the URL.
+   */
   const username = useMemo(
     () => rawUsername?.trim().toLowerCase() || "",
     [rawUsername],
   );
 
-  // Redux data source
+  /*
+   * Redux data source.
+   */
   const reduxUserData = useSelector((state: any) => state.score?.userData);
 
-  // Local state fallback to guarantee immediate UI rendering upon API 200 response
-  const [localUserData, setLocalUserData] = useState(null);
+  /*
+   * Local state is used as an immediate UI source.
+   *
+   * This means when /getInfo returns 200, the dashboard
+   * can render immediately even before relying on Redux.
+   */
+  const [localUserData, setLocalUserData] = useState<any>(null);
 
-  // Active user data: prefer local state, fallback to Redux
+  /*
+   * Prefer local data, otherwise use Redux.
+   */
   const activeUserData = localUserData || reduxUserData;
+
+  /*
+   * Local error is primarily used for cases such as 429.
+  */
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  /*
+   * Prevent duplicate initialization for the same username.
+   *
+   * We store the username rather than a simple boolean so that
+   * changing from /score/userA -> /score/userB doesn't inherit
+   * the previous lock.
+   */
+  const initializedUsernameRef = useRef<string | null>(null);
 
   const { progress, status, errorMessage, rejectionInfo, connect } = useSSE();
 
-  // Fetch final score from API
+  /*
+   * Fetch the final score after the SSE pipeline completes.
+   *
+   * This request is intentional:
+   * it retrieves the finished result after the worker has
+   * completed its background processing.
+   */
   const fetchFinalScore = useCallback(async () => {
-    if (!username) return;
+    if (!username) {
+      return;
+    }
 
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_BACKEND_URL}/api/user/getInfo`,
-        { username },
+        {
+          username,
+        },
       );
 
       if (response.status === 200 && response.data?.data) {
         const payload = response.data.data;
 
-        // Update both local state and Redux store
+        /*
+         * Update local state immediately.
+         */
         setLocalUserData(payload);
+
+        /*
+         * Keep Redux synchronized as well.
+         */
         dispatch(setUserData(payload));
       }
     } catch (error) {
@@ -54,25 +110,89 @@ const Result = () => {
   }, [username, dispatch]);
 
   useEffect(() => {
-    if (!username) return;
+    if (!username) {
+      return;
+    }
 
-    // Check if data is already available and matching (case-insensitive)
+    /*
+     * If we already have matching data, there is nothing
+     * else to initialize.
+     */
     const isMatchingDataLoaded =
       activeUserData &&
-      activeUserData.username?.toLowerCase() === username.trim().toLowerCase();
+      activeUserData.username?.trim().toLowerCase() === username;
 
     if (isMatchingDataLoaded) {
       return;
     }
 
-    // Cache-first validation: verify if job is already complete before opening SSE
+    /*
+     * Strict initialization lock.
+     *
+     * Prevents:
+     * - React re-renders
+     * - React StrictMode duplicate effects
+     * - dependency changes
+     *
+     * from starting the same pipeline multiple times.
+     */
+    if (initializedUsernameRef.current === username) {
+      return;
+    }
+
+    initializedUsernameRef.current = username;
+
+    /*
+     * Clear any previous local error before starting
+     * a new initialization cycle.
+     */
+    setLocalError(null);
+
+    /*
+     * The job ID must match the ID generated by the backend.
+     */
+    const jobId = `user-${username}`;
+
+    /*
+     * Correct SSE endpoint.
+     */
+    const sseEndpoint = `${import.meta.env.VITE_BACKEND_URL}/api/user/progress/${jobId}`;
+
+    /*
+     * -------------------------------------------------------
+     * CASE 1:
+     * Home.tsx already called /getInfo and received 202.
+     */
+    if (jobAlreadyStarted) {
+      connect(sseEndpoint, fetchFinalScore);
+
+      return;
+    }
+
+    /*
+     * -------------------------------------------------------
+     * CASE 2:
+     * Direct visit / page refresh.
+     *
+     * Result.tsx has no knowledge that Home.tsx started a job,
+     * so it checks the backend first.
+     * -------------------------------------------------------
+     */
     const checkCacheOrConnectSSE = async () => {
       try {
         const response = await axios.post(
           `${import.meta.env.VITE_BACKEND_URL}/api/user/getInfo`,
-          { username },
+          {
+            username,
+          },
         );
 
+        /*
+         * HTTP 200:
+         * Fresh data is already available.
+         *
+         * Render immediately.
+         */
         if (response.status === 200 && response.data?.data) {
           const payload = response.data.data;
 
@@ -82,58 +202,107 @@ const Result = () => {
           return;
         }
 
-        // Job is still processing (202): connect to SSE stream
+        /*
+         * HTTP 202:
+         * Backend accepted/has an asynchronous job running.
+         *
+         * Connect to SSE and wait for progress.
+         */
         if (response.status === 202) {
-          const jobId = `user-${username}`;
-
-          const sseEndpoint = `${import.meta.env.VITE_BACKEND_URL}/api/user/progress/${jobId}`;
-
           connect(sseEndpoint, fetchFinalScore);
+
+          return;
         }
       } catch (err) {
         console.error("Initial cache verification failed:", err);
 
-        // Fallback: attempt SSE connection directly
-        const jobId = `user-${username}`;
+        /*
+         * Important:
+         *
+         * Do NOT open SSE when the API explicitly rejected
+         * the request because of rate limiting.
+         */
+        if (axios.isAxiosError(err) && err.response?.status === 429) {
+          setLocalError("Rate limit exceeded. Please wait and try again.");
 
-        const sseEndpoint = `${import.meta.env.VITE_BACKEND_URL}/api/user/progress/${jobId}`;
+          return;
+        }
 
+        /*
+         * Generic failure fallback.
+         *
+         * This preserves Gemini's original behavior:
+         * attempt SSE for non-429 failures.
+         */
         connect(sseEndpoint, fetchFinalScore);
       }
     };
 
     checkCacheOrConnectSSE();
-  }, [username, activeUserData, connect, fetchFinalScore, dispatch]);
+  }, [
+    username,
+    activeUserData,
+    jobAlreadyStarted,
+    connect,
+    fetchFinalScore,
+    dispatch,
+  ]);
 
-  // --- RENDERING PIPELINE ---
+  /*
+   * ---------------------------------------------------------
+   * RENDERING PIPELINE
+   * ---------------------------------------------------------
+   */
 
-  // 1. Account Rejection
+  /*
+   * 1. Account rejection
+   */
   if (status === "rejected") {
     return <BotDetected username={username} rejectionData={rejectionInfo} />;
   }
 
-  // 2. Server or Network Failure
-  if (status === "error") {
-    const isUserNotFound = errorMessage?.toLowerCase().includes("not found");
+  /*
+   * 2. Local error or SSE/server error
+   */
+  const displayError = localError || (status === "error" ? errorMessage : null);
 
+  if (displayError) {
+    const isUserNotFound = displayError.toLowerCase().includes("not found");
+
+    /*
+     * GitHub/profile not found.
+     */
     if (isUserNotFound) {
       return <NotFound username={username} />;
     }
 
+    /*
+     * Other network/server errors.
+     */
     return (
       <div className="flex min-h-screen items-center justify-center bg-black px-6">
         <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-900 p-8 text-center">
           <h1 className="mb-3 text-2xl font-semibold text-white">
-            Connection Lost
+            Connection Interrupted
           </h1>
 
-          <p className="mb-6 text-sm text-zinc-400">
-            {errorMessage ||
+          <p className="mb-6 text-sm leading-6 text-zinc-400">
+            {displayError ||
               "We lost connection to the worker calculating your score."}
           </p>
 
           <button
-            onClick={() => navigate("/")}
+            onClick={() => {
+              /*
+               * Release the initialization lock.
+               *
+               * The page will navigate back home and a future
+               * attempt can start a new request.
+               */
+              initializedUsernameRef.current = null;
+
+              navigate("/");
+            }}
             className="rounded-md bg-[#2ea043] px-6 py-2 font-medium text-white transition-colors hover:bg-[#2c974b]"
           >
             Try Again
@@ -143,16 +312,20 @@ const Result = () => {
     );
   }
 
-  // 3. Render Dashboard when data is present (case-insensitive check)
+  /*
+   * 3. Final dashboard
+   */
   const isDataReady =
     activeUserData &&
-    activeUserData.username?.toLowerCase() === username.toLowerCase();
+    activeUserData.username?.trim().toLowerCase() === username;
 
   if (isDataReady) {
     return <ScoreDashboard userData={activeUserData} />;
   }
 
-  // 4. Processing / Calculating Terminal
+  /*
+   * 4. Processing state
+   */
   return <ProgressTerminal progress={progress} username={username} />;
 };
 
