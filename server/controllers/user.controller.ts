@@ -172,7 +172,7 @@ export const getJobProgress = async (req: Request, res: Response) => {
         res.flushHeaders(); // FIX 3: Force headers down the TCP pipe immediately
 
         //Add padding here too
-        res.write(`: ${'x'.repeat(2048)}\n\n`);
+        // res.write(`: ${'x'.repeat(2048)}\n\n`);
 
         res.write(
           `id: ${jobId}\nevent: completed\ndata: ${JSON.stringify({ status: "done", message: "Already completed" })}\n\n`,
@@ -195,7 +195,7 @@ export const getJobProgress = async (req: Request, res: Response) => {
 
     // FIX 4: The Cellular Padding
     // Send 2KB of empty comments to overflow strict 4G/5G ISP buffers and force the stream open.
-    res.write(`: ${"x".repeat(2048)}\n\n`);
+    // res.write(`: ${"x".repeat(2048)}\n\n`);
 
     // Reconnection Handling: Send current state immediately.
     const currentProgress = job.progress;
