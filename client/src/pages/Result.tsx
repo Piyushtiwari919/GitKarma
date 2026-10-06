@@ -53,18 +53,55 @@ const Result = () => {
   useEffect(() => {
     if (!username) return;
 
-    // 1. If data is already in Redux for this user, do nothing (Cache Hit from Home)
-    if (userData && userData.username === username) {
+    // If Redux already contains the correct user's data,
+    // don't make another API request.
+    if (userData?.username === username) {
       return;
     }
 
-    // 2. Otherwise, connect to SSE using the exact jobId format your backend uses
-    const jobId = `user-${username}`;
-    const sseEndpoint = `${import.meta.env.VITE_BACKEND_URL}/api/user/progress/${jobId}`;
+    let isMounted = true;
 
-    // Pass fetchFinalScore as the onComplete callback
-    connect(sseEndpoint, fetchFinalScore);
-  }, [username, userData, connect, fetchFinalScore]);
+    const checkCacheOrStartJob = async () => {
+      try {
+        const response = await axios.post(
+          `${import.meta.env.VITE_BACKEND_URL}/api/user/getInfo`,
+          { username },
+        );
+
+        if (!isMounted) return;
+
+        if (response.status === 200) {
+          // Fresh data found in Redis/MongoDB.
+          // No SSE is needed.
+          dispatch(setUserData(response.data.data));
+          return;
+        }
+
+        if (response.status === 202) {
+          // No fresh data. API has queued a BullMQ job.
+          // Now listen for progress through SSE.
+          const jobId = `user-${username}`;
+          const sseEndpoint = `${import.meta.env.VITE_BACKEND_URL}/api/user/progress/${encodeURIComponent(
+            jobId,
+          )}`;
+
+          connect(sseEndpoint, fetchFinalScore);
+        }
+      } catch (error) {
+        if (!isMounted) return;
+
+        console.error("Initial fetch failed:", error);
+
+        // You can handle 429/500 here later if required.
+      }
+    };
+
+    checkCacheOrStartJob();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [username, userData?.username, dispatch, connect, fetchFinalScore]);
 
   // --- RENDERING LOGIC ---
 
