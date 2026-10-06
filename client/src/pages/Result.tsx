@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
@@ -10,167 +10,150 @@ import BotDetected from "../components/bot/BotDetected.tsx";
 import NotFound from "./NotFound.tsx";
 
 const Result = () => {
-  const { username } = useParams<{ username: string }>();
+  const { username: rawUsername } = useParams<{ username: string }>();
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  // Assuming your slice stores data in state.score.userData
-  const userData = useSelector((state: any) => state.score?.userData);
+  // Normalize route param to lowercase
+  const username = useMemo(
+    () => rawUsername?.trim().toLowerCase() || "",
+    [rawUsername],
+  );
+
+  // Redux data source
+  const reduxUserData = useSelector((state: any) => state.score?.userData);
+
+  // Local state fallback to guarantee immediate UI rendering upon API 200 response
+  const [localUserData, setLocalUserData] = useState(null);
+
+  // Active user data: prefer local state, fallback to Redux
+  const activeUserData = localUserData || reduxUserData;
 
   const { progress, status, errorMessage, rejectionInfo, connect } = useSSE();
 
-  // Function to fetch the final payload once BullMQ is done, with mobile fallback
+  // Fetch final score from API
   const fetchFinalScore = useCallback(async () => {
+    if (!username) return;
+
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_BACKEND_URL}/api/user/getInfo`,
         { username },
       );
 
-      if (response.status === 200) {
-        // Success: The worker finished and we have the data
-        dispatch(setUserData(response.data.data));
-      } else if (response.status === 202) {
-        // Mobile Fallback: The SSE connection dropped, but BullMQ is still working.
-        // Do NOT navigate away. Poll the server again in 3 seconds.
-        console.warn(
-          "Mobile connection blip detected. Worker still processing. Polling...",
-        );
-        setTimeout(fetchFinalScore, 3000);
+      if (response.status === 200 && response.data?.data) {
+        const payload = response.data.data;
+
+        // Update both local state and Redux store
+        setLocalUserData(payload);
+        dispatch(setUserData(payload));
       }
     } catch (error) {
-      console.error("Failed to fetch final data", error);
-
-      // Handle the Rate Limiter (429) silently without kicking the user out
-      if (axios.isAxiosError(error) && error.response?.status === 429) {
-        console.warn("Rate limit hit during reconnect. Waiting 10 seconds...");
-        setTimeout(fetchFinalScore, 10000);
-        return;
-      }
+      console.error("Failed to fetch final user data:", error);
     }
   }, [username, dispatch]);
 
   useEffect(() => {
     if (!username) return;
 
-    // If Redux already contains the correct user's data,
-    // don't make another API request.
-    if (userData?.username === username) {
+    // Check if data is already available and matching (case-insensitive)
+    const isMatchingDataLoaded =
+      activeUserData &&
+      activeUserData.username?.toLowerCase() === username.trim().toLowerCase();
+
+    if (isMatchingDataLoaded) {
       return;
     }
 
-    let isMounted = true;
-
-    const checkCacheOrStartJob = async () => {
+    // Cache-first validation: verify if job is already complete before opening SSE
+    const checkCacheOrConnectSSE = async () => {
       try {
         const response = await axios.post(
           `${import.meta.env.VITE_BACKEND_URL}/api/user/getInfo`,
           { username },
         );
 
-        if (!isMounted) return;
+        if (response.status === 200 && response.data?.data) {
+          const payload = response.data.data;
 
-        if (response.status === 200) {
-          // Fresh data found in Redis/MongoDB.
-          // No SSE is needed.
-          dispatch(setUserData(response.data.data));
+          setLocalUserData(payload);
+          dispatch(setUserData(payload));
+
           return;
         }
 
+        // Job is still processing (202): connect to SSE stream
         if (response.status === 202) {
-          // No fresh data. API has queued a BullMQ job.
-          // Now listen for progress through SSE.
           const jobId = `user-${username}`;
-          const sseEndpoint = `${import.meta.env.VITE_BACKEND_URL}/api/user/progress/${encodeURIComponent(
-            jobId,
-          )}`;
+
+          const sseEndpoint = `${import.meta.env.VITE_BACKEND_URL}/api/user/progress/${jobId}`;
 
           connect(sseEndpoint, fetchFinalScore);
         }
-      } catch (error) {
-        if (!isMounted) return;
+      } catch (err) {
+        console.error("Initial cache verification failed:", err);
 
-        console.error("Initial fetch failed:", error);
+        // Fallback: attempt SSE connection directly
+        const jobId = `user-${username}`;
 
-        // You can handle 429/500 here later if required.
+        const sseEndpoint = `${import.meta.env.VITE_BACKEND_URL}/api/user/progress/${jobId}`;
+
+        connect(sseEndpoint, fetchFinalScore);
       }
     };
 
-    checkCacheOrStartJob();
+    checkCacheOrConnectSSE();
+  }, [username, activeUserData, connect, fetchFinalScore, dispatch]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [username, userData?.username, dispatch, connect, fetchFinalScore]);
+  // --- RENDERING PIPELINE ---
 
-  // --- RENDERING LOGIC ---
-
-  // 1. Bot / automated activity rejection
+  // 1. Account Rejection
   if (status === "rejected") {
-    return (
-      <BotDetected
-        username={username || "User"}
-        rejectionData={rejectionInfo}
-      />
-    );
+    return <BotDetected username={username} rejectionData={rejectionInfo} />;
   }
 
-  // 2. Actual technical failure
+  // 2. Server or Network Failure
   if (status === "error") {
-    // Check if the backend specifically told us the user wasn't found
     const isUserNotFound = errorMessage?.toLowerCase().includes("not found");
 
     if (isUserNotFound) {
-      return (
-        <main className="flex bg-[#0d1117] flex-col items-center justify-center min-h-[calc(100vh-4rem)]">
-          <NotFound username={username || "User"} />
-        </main>
-      );
+      return <NotFound username={username} />;
     }
 
-    // Fallback: Generic Server/Network Error
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center text-white bg-[#0d1117]">
-        <h2 className="text-2xl text-red-500 mb-4 font-bold">
-          Connection Lost
-        </h2>
-        <p className="text-gray-400 mb-6 text-center max-w-md">
-          {errorMessage ||
-            "We lost connection to the worker calculating your score."}
-        </p>
-        <button
-          onClick={() => navigate("/")}
-          className="bg-[#2ea043] px-6 py-2 rounded-md font-medium text-white transition-colors hover:bg-[#2c974b]"
-        >
-          Try Again
-        </button>
+      <div className="flex min-h-screen items-center justify-center bg-black px-6">
+        <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-900 p-8 text-center">
+          <h1 className="mb-3 text-2xl font-semibold text-white">
+            Connection Lost
+          </h1>
+
+          <p className="mb-6 text-sm text-zinc-400">
+            {errorMessage ||
+              "We lost connection to the worker calculating your score."}
+          </p>
+
+          <button
+            onClick={() => navigate("/")}
+            className="rounded-md bg-[#2ea043] px-6 py-2 font-medium text-white transition-colors hover:bg-[#2c974b]"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
 
-  // If Redux has the data, render the final dashboard
-  if (userData && userData.username === username) {
-    return (
-      <main className="flex min-h-[calc(100vh-4rem)] flex-col bg-[#0d1117] px-4 sm:px-6 lg:px-8">
-        <ScoreDashboard userData={userData} />
-      </main>
-    );
+  // 3. Render Dashboard when data is present (case-insensitive check)
+  const isDataReady =
+    activeUserData &&
+    activeUserData.username?.toLowerCase() === username.toLowerCase();
+
+  if (isDataReady) {
+    return <ScoreDashboard userData={activeUserData} />;
   }
 
-  // Otherwise, we are calculating. Show the Terminal!
-  return (
-    <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center bg-[#0d1117] p-4 sm:p-8">
-      <div className="w-full text-center mb-8">
-        <h2 className="text-2xl font-bold text-[#c9d1d9] sm:text-3xl">
-          Analyzing Profile
-        </h2>
-        <p className="mt-2 text-sm text-gray-400">
-          Hold tight while our worker calculates your score.
-        </p>
-      </div>
-      <ProgressTerminal progress={progress} username={username} />
-    </main>
-  );
+  // 4. Processing / Calculating Terminal
+  return <ProgressTerminal progress={progress} username={username} />;
 };
 
 export default Result;
