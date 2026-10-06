@@ -19,7 +19,7 @@ const Result = () => {
 
   const { progress, status, errorMessage, rejectionInfo, connect } = useSSE();
 
-  // Function to fetch the final payload once BullMQ is done
+  // Function to fetch the final payload once BullMQ is done, with mobile fallback
   const fetchFinalScore = useCallback(async () => {
     try {
       const response = await axios.post(
@@ -28,17 +28,27 @@ const Result = () => {
       );
 
       if (response.status === 200) {
+        // Success: The worker finished and we have the data
         dispatch(setUserData(response.data.data));
-      } else {
-        // If it somehow returns 202 again, the worker failed.
-        console.error("Worker did not finish properly");
-        navigate("/");
+      } else if (response.status === 202) {
+        // Mobile Fallback: The SSE connection dropped, but BullMQ is still working.
+        // Do NOT navigate away. Poll the server again in 3 seconds.
+        console.warn(
+          "Mobile connection blip detected. Worker still processing. Polling...",
+        );
+        setTimeout(fetchFinalScore, 3000);
       }
     } catch (error) {
       console.error("Failed to fetch final data", error);
-      navigate("/");
+
+      // Handle the Rate Limiter (429) silently without kicking the user out
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+        console.warn("Rate limit hit during reconnect. Waiting 10 seconds...");
+        setTimeout(fetchFinalScore, 10000);
+        return;
+      }
     }
-  }, [username, dispatch, navigate]);
+  }, [username, dispatch]);
 
   useEffect(() => {
     if (!username) return;
