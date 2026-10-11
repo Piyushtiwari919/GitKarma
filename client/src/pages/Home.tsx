@@ -169,7 +169,7 @@ const Home = () => {
           Hidden on mobile, appears on lg screens and up.
         */}
         {!rateLimitData && (
-          <div className="hidden lg:block absolute left-4 xl:left-10 top-32 w-50 xl:w-66 -rotate-6 opacity-75 transition-all duration-500 hover:z-20 hover:rotate-0 hover:scale-105 hover:opacity-100">
+          <div className="hidden lg:block absolute left-4 xl:left-10 top-32 w-50 xl:w-65 -rotate-8 opacity-75 transition-all duration-500 hover:z-20 hover:rotate-0 hover:scale-105 hover:opacity-100">
             <div className="relative rounded-xl border border-zinc-700/50 bg-zinc-900/40 p-1.5 shadow-2xl backdrop-blur-md">
               {/* Two-word badge */}
               <div className="absolute -right-3 -top-3 z-10 flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 shadow-lg">
