@@ -4,7 +4,8 @@ import { extractGithubUsername } from "../utils/githubUtils.js";
 import axios from "axios";
 import { useDispatch } from "react-redux";
 import { setUserData } from "../store/slices/scoreSlice.js";
-import RateLimitExceeded from "../components/common/RateLimitExceeded.js";
+import RateLimitExceeded from "../components/common/RateLimitExceeded.jsx";
+import torvaldsPreview from "../assets/preview-torvalds.png"; // Load your screenshot
 
 interface RateLimitData {
   retryAfterSeconds: number;
@@ -162,8 +163,32 @@ const Home = () => {
           className="pointer-events-none absolute bottom-0 left-1/2 -z-10 h-40 w-[min(80vw,40rem)] -translate-x-1/2 rounded-full bg-indigo-500/6 blur-[90px]"
         />
 
+        {/* 
+          FLOATING PREVIEW CARD 
+          Absolute positioning keeps the main content perfectly centered.
+          Hidden on mobile, appears on lg screens and up.
+        */}
+        {!rateLimitData && (
+          <div className="hidden lg:block absolute left-4 xl:left-10 top-32 w-50 xl:w-66 -rotate-6 opacity-75 transition-all duration-500 hover:z-20 hover:rotate-0 hover:scale-105 hover:opacity-100">
+            <div className="relative rounded-xl border border-zinc-700/50 bg-zinc-900/40 p-1.5 shadow-2xl backdrop-blur-md">
+              {/* Two-word badge */}
+              <div className="absolute -right-3 -top-3 z-10 flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 shadow-lg">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-300">
+                  Sample Profile
+                </span>
+              </div>
+              <img
+                src={torvaldsPreview}
+                alt="GitKarma Sample Score"
+                className="h-auto w-full rounded-lg border border-zinc-800/80 shadow-inner"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Hero */}
-        <section className="w-full max-w-3xl text-center">
+        <section className="relative z-10 w-full max-w-3xl text-center">
           <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-zinc-800/90 bg-zinc-900/60 px-3.5 py-1.5 shadow-sm shadow-black/20">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
             <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-400 sm:text-[11px]">
@@ -186,7 +211,7 @@ const Home = () => {
         </section>
 
         {/* Search / Rate Limit */}
-        <section className="mt-10 w-full max-w-xl sm:mt-12">
+        <section className="relative z-10 mt-10 w-full max-w-xl sm:mt-12">
           {rateLimitData ? (
             <div className="mx-auto w-full">
               <RateLimitExceeded
@@ -290,7 +315,7 @@ const Home = () => {
 
         {/* Supporting detail */}
         {!rateLimitData && (
-          <div className="mt-6 flex items-center justify-center gap-2 text-xs text-zinc-500">
+          <div className="relative z-10 mt-6 flex items-center justify-center gap-2 text-xs text-zinc-500">
             <svg
               viewBox="0 0 24 24"
               fill="none"
