@@ -32,10 +32,13 @@ const scoreSlice = createSlice({
     setStatus: (state, action: PayloadAction<Status>) => {
       state.status = action.payload;
     },
+    removeUserData: (state) => {
+      state.userData = null;
+    },
   },
 });
 
-export const { setUserData, setRepos, setFinalScore, setStatus } =
+export const { setUserData, setRepos, setFinalScore, setStatus,removeUserData } =
   scoreSlice.actions;
 
 export default scoreSlice.reducer;

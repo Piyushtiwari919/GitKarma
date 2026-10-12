@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { extractGithubUsername } from "../utils/githubUtils.js";
 import axios from "axios";
 import { useDispatch } from "react-redux";
-import { setUserData } from "../store/slices/scoreSlice.js";
+import { removeUserData, setUserData } from "../store/slices/scoreSlice.js";
 import RateLimitExceeded from "../components/common/RateLimitExceeded.jsx";
 import torvaldsPreview from "../assets/preview-torvalds.png"; // Load your screenshot
 
@@ -24,6 +24,9 @@ const Home = () => {
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
+
+  // Removing Old State
+  dispatch(removeUserData());
 
   const showToast = (text: string) => {
     setMessage(text);
